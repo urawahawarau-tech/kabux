@@ -142,6 +142,8 @@ export default function KabuxApp() {
         bio: row.bio || "",
         avatarUrl: row.avatar_url || "",
         coverUrl: row.cover_url || "",
+        role: row.role || "user",
+        isSuspended: row.is_suspended || false,
         createdAt: row.created_at,
       })),
       posts: posts.data.map((row) => ({
@@ -152,6 +154,7 @@ export default function KabuxApp() {
         quotedPostId: row.quoted_post_id,
         replyToPostId: row.reply_to_post_id,
         impressionCount: row.impression_count || 0,
+        isHidden: row.is_hidden || false,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       })),
@@ -191,7 +194,7 @@ export default function KabuxApp() {
 
   const feedPosts = useMemo(() => {
     const followed = new Set(store.follows.filter((follow) => follow.followerId === store.viewerId).map((follow) => follow.followingId));
-    let posts = store.posts.filter((post) => !post.replyToPostId);
+    let posts = store.posts.filter((post) => !post.replyToPostId && !post.isHidden);
     if (feedMode.startsWith("following")) posts = posts.filter((post) => followed.has(post.userId) || post.userId === store.viewerId);
     return [...posts].sort(feedMode.endsWith("Recommended") ? (a, b) => scorePost(b) - scorePost(a) : (a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [store, feedMode]);
@@ -299,6 +302,7 @@ export default function KabuxApp() {
 
   async function createPost({ body, files, quoteId = null, replyToId = null }) {
     if (!store.viewerId) return showToast("投稿するにはログインしてください");
+    if (viewer.isSuspended) return showToast("このアカウントは停止中です");
     if (!body.trim() && files.length === 0) return showToast("本文または画像を追加してください");
 
     const imageUrls = await uploadImages(files);
@@ -354,6 +358,7 @@ export default function KabuxApp() {
 
   async function toggleReaction(postId, type) {
     if (!store.viewerId) return showToast("反応するにはログインしてください");
+    if (viewer.isSuspended) return showToast("このアカウントは停止中です");
     const existing = store.reactions.find((reaction) => reaction.userId === store.viewerId && reaction.postId === postId && reaction.type === type);
     const other = type === "useful" ? "noise" : "useful";
 
@@ -391,6 +396,7 @@ export default function KabuxApp() {
 
   async function toggleFollow(userId) {
     if (!store.viewerId) return showToast("フォローするにはログインしてください");
+    if (viewer.isSuspended) return showToast("このアカウントは停止中です");
     if (userId === store.viewerId) return;
     const existing = store.follows.find((follow) => follow.followerId === store.viewerId && follow.followingId === userId);
     if (cloudMode) {
@@ -427,6 +433,36 @@ export default function KabuxApp() {
       setStore((current) => ({ ...current, posts: current.posts.filter((item) => item.id !== post.id) }));
     }
     showToast("投稿を削除しました");
+  }
+
+  async function togglePostVisibility(post) {
+    if (viewer.role !== "admin") return;
+    if (cloudMode) {
+      const { error } = await supabase.from("posts").update({ is_hidden: !post.isHidden }).eq("id", post.id);
+      if (error) return showToast(error.message);
+      await loadCloud(store.viewerId);
+    } else {
+      setStore((current) => ({
+        ...current,
+        posts: current.posts.map((item) => (item.id === post.id ? { ...item, isHidden: !item.isHidden } : item)),
+      }));
+    }
+    showToast(post.isHidden ? "投稿を再表示しました" : "投稿を非表示にしました");
+  }
+
+  async function toggleUserSuspension(user) {
+    if (viewer.role !== "admin" || user.id === viewer.id) return;
+    if (cloudMode) {
+      const { error } = await supabase.rpc("set_profile_suspension", { target_user_id: user.id, suspended: !user.isSuspended });
+      if (error) return showToast(error.message);
+      await loadCloud(store.viewerId);
+    } else {
+      setStore((current) => ({
+        ...current,
+        users: current.users.map((item) => (item.id === user.id ? { ...item, isSuspended: !item.isSuspended } : item)),
+      }));
+    }
+    showToast(user.isSuspended ? "ユーザー停止を解除しました" : "ユーザーを停止しました");
   }
 
   async function updateProfile({ username, displayName, bio, avatarFile, coverFile }) {
@@ -483,6 +519,7 @@ export default function KabuxApp() {
             ["bookmarks", "▣", "保存"],
             ["notifications", "◌", "通知"],
             ["profile", "◉", "プロフィール"],
+            ...(viewer.role === "admin" ? [["admin", "⚙", "管理"]] : []),
           ].map(([key, icon, label]) => (
             <button className={`nav-item ${route === key ? "active" : ""}`} key={key} type="button" onClick={() => setRoute(key)}>
               <span className="nav-icon" aria-hidden="true">{icon}</span>
@@ -572,6 +609,12 @@ export default function KabuxApp() {
         <section className={`view ${route === "profile" ? "active" : ""}`}>
           <Profile user={profileUser} store={store} renderPost={renderPost} onFollow={toggleFollow} editing={editingProfile} onEdit={() => setEditingProfile(true)} onCancel={() => setEditingProfile(false)} onSave={updateProfile} />
         </section>
+
+        {viewer.role === "admin" ? (
+          <section className={`view ${route === "admin" ? "active" : ""}`}>
+            <AdminPanel store={store} renderPost={renderPost} onTogglePostVisibility={togglePostVisibility} onToggleUserSuspension={toggleUserSuspension} />
+          </section>
+        ) : null}
       </main>
 
       <RightRail store={store} countsFor={countsFor} />
@@ -799,6 +842,51 @@ function Profile({ user, store, renderPost, onFollow, editing, onEdit, onCancel,
         </div>
       </div>
       <div className="feed profile-feed">{posts.map((post) => renderPost(post))}</div>
+    </>
+  );
+}
+
+function AdminPanel({ store, renderPost, onTogglePostVisibility, onToggleUserSuspension }) {
+  const reportedPosts = store.reports
+    .map((report) => ({ report, post: store.posts.find((post) => post.id === report.postId), reporter: store.users.find((user) => user.id === report.userId) }))
+    .filter((item) => item.post);
+  return (
+    <>
+      <SectionHead eyebrow="管理者専用" title="管理" />
+      <div className="admin-stats">
+        <div><strong>{store.users.length}</strong><span>ユーザー</span></div>
+        <div><strong>{store.posts.length}</strong><span>投稿</span></div>
+        <div><strong>{store.reports.length}</strong><span>通報</span></div>
+        <div><strong>{store.users.filter((user) => user.isSuspended).length}</strong><span>停止中</span></div>
+      </div>
+
+      <section className="admin-block">
+        <h2>通報</h2>
+        {reportedPosts.length ? reportedPosts.map(({ report, post, reporter }) => (
+          <div className="admin-item" key={report.id}>
+            <div className="meta">通報者 @{reporter?.username || "unknown"} / {report.reason}</div>
+            {renderPost(post, true)}
+            <button className="ghost-button" type="button" onClick={() => onTogglePostVisibility(post)}>{post.isHidden ? "再表示" : "非表示"}</button>
+          </div>
+        )) : <Empty>通報はありません。</Empty>}
+      </section>
+
+      <section className="admin-block">
+        <h2>ユーザー</h2>
+        <div className="admin-users">
+          {store.users.map((user) => (
+            <div className="admin-user-row" key={user.id}>
+              <div>
+                <strong>{user.displayName}</strong>
+                <div className="meta">@{user.username} {user.role === "admin" ? "/ admin" : ""}</div>
+              </div>
+              {user.role !== "admin" ? (
+                <button className="ghost-button" type="button" onClick={() => onToggleUserSuspension(user)}>{user.isSuspended ? "停止解除" : "停止"}</button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </section>
     </>
   );
 }
