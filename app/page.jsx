@@ -428,22 +428,37 @@ export default function KabuxApp() {
     showToast("投稿を削除しました");
   }
 
-  async function updateProfile({ username, displayName, bio }) {
+  async function updateProfile({ username, displayName, bio, avatarFile }) {
     if (!store.viewerId) return;
+    const avatarUrl = avatarFile ? await uploadAvatar(avatarFile) : viewer.avatarUrl;
     if (cloudMode) {
       const { data: existingUsername } = await supabase.from("profiles").select("id").eq("username", username).neq("id", store.viewerId).maybeSingle();
       if (existingUsername) return showToast("そのユーザーIDは使われています");
-      const { error } = await supabase.from("profiles").update({ username, display_name: displayName, bio }).eq("id", store.viewerId);
+      const { error } = await supabase.from("profiles").update({ username, display_name: displayName, bio, avatar_url: avatarUrl }).eq("id", store.viewerId);
       if (error) return showToast(error.message);
       await loadCloud(store.viewerId);
     } else {
       setStore((current) => ({
         ...current,
-        users: current.users.map((user) => (user.id === current.viewerId ? { ...user, username, displayName, bio } : user)),
+        users: current.users.map((user) => (user.id === current.viewerId ? { ...user, username, displayName, bio, avatarUrl } : user)),
       }));
     }
     setEditingProfile(false);
     showToast("プロフィールを更新しました");
+  }
+
+  async function uploadAvatar(file) {
+    const compressed = await compressImage(file);
+    if (!cloudMode) return readFile(compressed);
+
+    const path = `${store.viewerId}/avatar-${crypto.randomUUID()}.jpg`;
+    const { error } = await supabase.storage.from("post-images").upload(path, compressed, { upsert: false });
+    if (error) {
+      showToast(`画像アップロード失敗: ${error.message}`);
+      return viewer.avatarUrl;
+    }
+    const { data } = supabase.storage.from("post-images").getPublicUrl(path);
+    return data.publicUrl;
   }
 
   const profileUser = store.users.find((user) => user.id === profileUserId) || viewer;
@@ -718,6 +733,8 @@ function SearchResults({ store, query, kind, renderPost, onFollow }) {
 }
 
 function Profile({ user, store, renderPost, onFollow, editing, onEdit, onCancel, onSave }) {
+  const [avatarFile, setAvatarFile] = useState(null);
+  const avatarPreview = useMemo(() => (avatarFile ? URL.createObjectURL(avatarFile) : ""), [avatarFile]);
   const posts = store.posts.filter((post) => post.userId === user.id && !post.replyToPostId);
   const following = store.follows.filter((follow) => follow.followerId === user.id).length;
   const followers = store.follows.filter((follow) => follow.followingId === user.id).length;
@@ -727,7 +744,7 @@ function Profile({ user, store, renderPost, onFollow, editing, onEdit, onCancel,
       <div className="profile-cover"></div>
       <div className="profile-head">
         <div>
-          <Avatar user={user} />
+          <Avatar user={avatarPreview ? { ...user, avatarUrl: avatarPreview } : user} />
           <h1>{user.displayName}</h1>
           <div className="user-id">@{user.username}</div>
         </div>
@@ -744,9 +761,14 @@ function Profile({ user, store, renderPost, onFollow, editing, onEdit, onCancel,
                 username: data.get("username").trim().replace(/^@/, ""),
                 displayName: data.get("displayName").trim(),
                 bio: data.get("bio").trim(),
+                avatarFile,
               });
             }}
           >
+            <label className="field">
+              プロフィール画像
+              <input type="file" accept="image/*" onChange={(event) => setAvatarFile(event.target.files?.[0] || null)} />
+            </label>
             <label className="field">ユーザーID<input name="username" defaultValue={user.username} maxLength="24" pattern="[a-zA-Z0-9_]+" required /></label>
             <label className="field">表示名<input name="displayName" defaultValue={user.displayName} maxLength="32" required /></label>
             <label className="field">自己紹介<textarea name="bio" defaultValue={user.bio} maxLength="160" /></label>
