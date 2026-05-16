@@ -280,11 +280,25 @@ button {
   padding: 14px;
 }
 
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .auth-form {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
   gap: 10px;
   align-items: end;
+}
+
+.auth-form.signup {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.auth-form.signup .primary-button {
+  grid-column: 1 / -1;
 }
 
 .field {

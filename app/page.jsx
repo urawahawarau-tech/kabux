@@ -78,6 +78,7 @@ export default function KabuxApp() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(Boolean(supabase));
   const [authMessage, setAuthMessage] = useState("");
+  const [authMode, setAuthMode] = useState("signup");
   const [editingProfile, setEditingProfile] = useState(false);
 
   const cloudMode = Boolean(supabase && session);
@@ -192,10 +193,11 @@ export default function KabuxApp() {
     return [...posts].sort(feedMode.endsWith("Recommended") ? (a, b) => scorePost(b) - scorePost(a) : (a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [store, feedMode]);
 
-  async function signIn(event) {
+  async function signUp(event) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const email = data.get("email").trim();
+    const password = data.get("password");
     const displayName = data.get("displayName").trim();
     const username = data.get("username").trim().replace(/^@/, "");
 
@@ -214,14 +216,27 @@ export default function KabuxApp() {
     }
 
     localStorage.setItem("kabux:pending-profile", JSON.stringify({ username, displayName }));
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signUp({
       email,
+      password,
       options: {
         emailRedirectTo: window.location.origin,
         data: { username, display_name: displayName },
       },
     });
-    setAuthMessage(error ? error.message : "ログインリンクをメールに送りました。リンクを開くと登録が完了します。");
+    setAuthMessage(error ? error.message : "確認メールを送りました。メール内のリンクを開くと登録が完了します。");
+  }
+
+  async function signIn(event) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const email = data.get("email").trim();
+    const password = data.get("password");
+
+    if (!supabase) return;
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setAuthMessage(error ? "メールまたはパスワードが違います。" : "");
   }
 
   async function ensureCloudProfile() {
@@ -443,7 +458,7 @@ export default function KabuxApp() {
         <button className="primary-button nav-compose" type="button" onClick={() => setModal({})}>投稿する</button>
         <div className="viewer-card">
           <ViewerCard user={viewer} mode={supabase ? (session ? "クラウド" : "閲覧のみ") : "ローカル"} />
-          {supabase && session ? <button className="ghost-button full" type="button" onClick={() => supabase.auth.signOut()}>ログアウト</button> : null}
+          {supabase && session ? <button className="ghost-button full" type="button" onClick={() => supabase.auth.signOut({ scope: "local" })}>ログアウト</button> : null}
         </div>
       </aside>
 
@@ -456,7 +471,16 @@ export default function KabuxApp() {
           <button className="ghost-button mobile-compose" type="button" onClick={() => setModal({})}>投稿</button>
         </header>
 
-        {supabase && !session ? <AuthPanel onSubmit={signIn} message={authMessage} supabaseEnabled={Boolean(supabase)} /> : null}
+        {supabase && !session ? (
+          <AuthPanel
+            mode={authMode}
+            onModeChange={setAuthMode}
+            onSignIn={signIn}
+            onSignUp={signUp}
+            message={authMessage}
+            supabaseEnabled={Boolean(supabase)}
+          />
+        ) : null}
 
         <section className={`view ${route === "home" ? "active" : ""}`}>
           <SectionHead eyebrow="日本株SNS" title="ホーム" onCompose={() => setModal({})} />
@@ -578,14 +602,21 @@ export default function KabuxApp() {
   }
 }
 
-function AuthPanel({ onSubmit, message, supabaseEnabled }) {
+function AuthPanel({ mode, onModeChange, onSignIn, onSignUp, message, supabaseEnabled }) {
   return (
     <section className="auth-panel" aria-label="ユーザー登録とログイン">
-      <form className="auth-form" onSubmit={onSubmit}>
+      {supabaseEnabled ? (
+        <div className="auth-tabs" role="tablist" aria-label="認証モード">
+          <button className={`tab ${mode === "signup" ? "active" : ""}`} type="button" onClick={() => onModeChange("signup")}>新規登録</button>
+          <button className={`tab ${mode === "signin" ? "active" : ""}`} type="button" onClick={() => onModeChange("signin")}>ログイン</button>
+        </div>
+      ) : null}
+      <form className={`auth-form ${mode}`} onSubmit={mode === "signup" ? onSignUp : onSignIn}>
         {supabaseEnabled ? <label className="field">メール<input name="email" type="email" required placeholder="you@example.com" /></label> : null}
-        <label className="field">表示名<input name="displayName" required maxLength="32" placeholder="例: 決算メモ" /></label>
-        <label className="field">ユーザーID<input name="username" required maxLength="24" pattern="[a-zA-Z0-9_]+" placeholder="kessan_note" /></label>
-        <button className="primary-button" type="submit">{supabaseEnabled ? "登録 / ログイン" : "ローカルで試す"}</button>
+        {supabaseEnabled ? <label className="field">パスワード<input name="password" type="password" required minLength="8" placeholder="8文字以上" /></label> : null}
+        {mode === "signup" ? <label className="field">表示名<input name="displayName" required maxLength="32" placeholder="例: 決算メモ" /></label> : null}
+        {mode === "signup" ? <label className="field">ユーザーID<input name="username" required maxLength="24" pattern="[a-zA-Z0-9_]+" placeholder="kessan_note" /></label> : null}
+        <button className="primary-button" type="submit">{supabaseEnabled ? (mode === "signup" ? "登録する" : "ログイン") : "ローカルで試す"}</button>
       </form>
       {message ? <p className="meta">{message}</p> : null}
       {!supabaseEnabled ? <p className="meta">Supabase環境変数を設定すると、共有DB/Auth/画像保存で動きます。</p> : null}
