@@ -256,7 +256,7 @@ export default function KabuxApp() {
       imageUrls,
       quotedPostId: quoteId,
       replyToPostId: replyToId,
-      impressionCount: Math.floor(60 + Math.random() * 420),
+      impressionCount: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
