@@ -301,6 +301,10 @@ button {
   grid-column: 1 / -1;
 }
 
+.auth-reset {
+  margin-top: 10px;
+}
+
 .field {
   display: grid;
   gap: 6px;

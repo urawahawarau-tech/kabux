@@ -79,6 +79,7 @@ export default function KabuxApp() {
   const [loading, setLoading] = useState(Boolean(supabase));
   const [authMessage, setAuthMessage] = useState("");
   const [authMode, setAuthMode] = useState("signup");
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
 
   const cloudMode = Boolean(supabase && session);
@@ -98,7 +99,8 @@ export default function KabuxApp() {
       loadCloud(data.session?.user.id || null);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setPasswordRecovery(event === "PASSWORD_RECOVERY");
       setSession(nextSession);
       loadCloud(nextSession?.user.id || null);
     });
@@ -237,6 +239,21 @@ export default function KabuxApp() {
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setAuthMessage(error ? "メールまたはパスワードが違います。" : "");
+  }
+
+  async function sendPasswordReset(email) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+    setAuthMessage(error ? error.message : "パスワード設定メールを送りました。メール内のリンクを開いてください。");
+  }
+
+  async function updatePassword(event) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const password = data.get("password");
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return showToast(error.message);
+    setPasswordRecovery(false);
+    showToast("パスワードを更新しました");
   }
 
   async function ensureCloudProfile() {
@@ -471,12 +488,15 @@ export default function KabuxApp() {
           <button className="ghost-button mobile-compose" type="button" onClick={() => setModal({})}>投稿</button>
         </header>
 
+        {supabase && passwordRecovery ? <PasswordRecoveryPanel onSubmit={updatePassword} /> : null}
+
         {supabase && !session ? (
           <AuthPanel
             mode={authMode}
             onModeChange={setAuthMode}
             onSignIn={signIn}
             onSignUp={signUp}
+            onPasswordReset={sendPasswordReset}
             message={authMessage}
             supabaseEnabled={Boolean(supabase)}
           />
@@ -602,7 +622,8 @@ export default function KabuxApp() {
   }
 }
 
-function AuthPanel({ mode, onModeChange, onSignIn, onSignUp, message, supabaseEnabled }) {
+function AuthPanel({ mode, onModeChange, onSignIn, onSignUp, onPasswordReset, message, supabaseEnabled }) {
+  const [resetEmail, setResetEmail] = useState("");
   return (
     <section className="auth-panel" aria-label="ユーザー登録とログイン">
       {supabaseEnabled ? (
@@ -612,14 +633,33 @@ function AuthPanel({ mode, onModeChange, onSignIn, onSignUp, message, supabaseEn
         </div>
       ) : null}
       <form className={`auth-form ${mode}`} onSubmit={mode === "signup" ? onSignUp : onSignIn}>
-        {supabaseEnabled ? <label className="field">メール<input name="email" type="email" required placeholder="you@example.com" /></label> : null}
+        {supabaseEnabled ? <label className="field">メール<input name="email" type="email" required placeholder="you@example.com" onChange={(event) => setResetEmail(event.target.value)} /></label> : null}
         {supabaseEnabled ? <label className="field">パスワード<input name="password" type="password" required minLength="8" placeholder="8文字以上" /></label> : null}
         {mode === "signup" ? <label className="field">表示名<input name="displayName" required maxLength="32" placeholder="例: 決算メモ" /></label> : null}
         {mode === "signup" ? <label className="field">ユーザーID<input name="username" required maxLength="24" pattern="[a-zA-Z0-9_]+" placeholder="kessan_note" /></label> : null}
         <button className="primary-button" type="submit">{supabaseEnabled ? (mode === "signup" ? "登録する" : "ログイン") : "ローカルで試す"}</button>
       </form>
+      {supabaseEnabled && mode === "signin" ? (
+        <button className="mini-link auth-reset" type="button" onClick={() => resetEmail && onPasswordReset(resetEmail)}>
+          パスワード設定 / 再設定
+        </button>
+      ) : null}
       {message ? <p className="meta">{message}</p> : null}
       {!supabaseEnabled ? <p className="meta">Supabase環境変数を設定すると、共有DB/Auth/画像保存で動きます。</p> : null}
+    </section>
+  );
+}
+
+function PasswordRecoveryPanel({ onSubmit }) {
+  return (
+    <section className="auth-panel" aria-label="パスワード再設定">
+      <form className="auth-form signin" onSubmit={onSubmit}>
+        <label className="field">
+          新しいパスワード
+          <input name="password" type="password" minLength="8" required placeholder="8文字以上" />
+        </label>
+        <button className="primary-button" type="submit">更新する</button>
+      </form>
     </section>
   );
 }
