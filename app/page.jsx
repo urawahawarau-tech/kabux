@@ -607,7 +607,17 @@ export default function KabuxApp() {
         </section>
 
         <section className={`view ${route === "profile" ? "active" : ""}`}>
-          <Profile user={profileUser} store={store} renderPost={renderPost} onFollow={toggleFollow} editing={editingProfile} onEdit={() => setEditingProfile(true)} onCancel={() => setEditingProfile(false)} onSave={updateProfile} />
+          <Profile
+            user={profileUser}
+            store={store}
+            renderPost={renderPost}
+            onFollow={toggleFollow}
+            editing={editingProfile}
+            onEdit={() => setEditingProfile(true)}
+            onCancel={() => setEditingProfile(false)}
+            onSave={updateProfile}
+            onSignOut={() => supabase?.auth.signOut({ scope: "local" })}
+          />
         </section>
 
         {viewer.role === "admin" ? (
@@ -780,7 +790,7 @@ function SearchResults({ store, query, kind, renderPost, onFollow }) {
   );
 }
 
-function Profile({ user, store, renderPost, onFollow, editing, onEdit, onCancel, onSave }) {
+function Profile({ user, store, renderPost, onFollow, editing, onEdit, onCancel, onSave, onSignOut }) {
   const [avatarFile, setAvatarFile] = useState(null);
   const [coverFile, setCoverFile] = useState(null);
   const avatarPreview = useMemo(() => (avatarFile ? URL.createObjectURL(avatarFile) : ""), [avatarFile]);
@@ -840,6 +850,11 @@ function Profile({ user, store, renderPost, onFollow, editing, onEdit, onCancel,
           <span>フォロワー {followers}</span>
           <span>投稿 {posts.length}</span>
         </div>
+        {user.id === store.viewerId ? (
+          <div className="profile-actions">
+            <button className="ghost-button" type="button" onClick={onSignOut}>ログアウト</button>
+          </div>
+        ) : null}
       </div>
       <div className="feed profile-feed">{posts.map((post) => renderPost(post))}</div>
     </>
