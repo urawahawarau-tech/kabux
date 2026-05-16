@@ -141,6 +141,7 @@ export default function KabuxApp() {
         displayName: row.display_name,
         bio: row.bio || "",
         avatarUrl: row.avatar_url || "",
+        coverUrl: row.cover_url || "",
         createdAt: row.created_at,
       })),
       posts: posts.data.map((row) => ({
@@ -428,30 +429,31 @@ export default function KabuxApp() {
     showToast("投稿を削除しました");
   }
 
-  async function updateProfile({ username, displayName, bio, avatarFile }) {
+  async function updateProfile({ username, displayName, bio, avatarFile, coverFile }) {
     if (!store.viewerId) return;
-    const avatarUrl = avatarFile ? await uploadAvatar(avatarFile) : viewer.avatarUrl;
+    const avatarUrl = avatarFile ? await uploadProfileImage(avatarFile, "avatar") : viewer.avatarUrl;
+    const coverUrl = coverFile ? await uploadProfileImage(coverFile, "cover") : viewer.coverUrl;
     if (cloudMode) {
       const { data: existingUsername } = await supabase.from("profiles").select("id").eq("username", username).neq("id", store.viewerId).maybeSingle();
       if (existingUsername) return showToast("そのユーザーIDは使われています");
-      const { error } = await supabase.from("profiles").update({ username, display_name: displayName, bio, avatar_url: avatarUrl }).eq("id", store.viewerId);
+      const { error } = await supabase.from("profiles").update({ username, display_name: displayName, bio, avatar_url: avatarUrl, cover_url: coverUrl }).eq("id", store.viewerId);
       if (error) return showToast(error.message);
       await loadCloud(store.viewerId);
     } else {
       setStore((current) => ({
         ...current,
-        users: current.users.map((user) => (user.id === current.viewerId ? { ...user, username, displayName, bio, avatarUrl } : user)),
+        users: current.users.map((user) => (user.id === current.viewerId ? { ...user, username, displayName, bio, avatarUrl, coverUrl } : user)),
       }));
     }
     setEditingProfile(false);
     showToast("プロフィールを更新しました");
   }
 
-  async function uploadAvatar(file) {
+  async function uploadProfileImage(file, kind) {
     const compressed = await compressImage(file);
     if (!cloudMode) return readFile(compressed);
 
-    const path = `${store.viewerId}/avatar-${crypto.randomUUID()}.jpg`;
+    const path = `${store.viewerId}/${kind}-${crypto.randomUUID()}.jpg`;
     const { error } = await supabase.storage.from("post-images").upload(path, compressed, { upsert: false });
     if (error) {
       showToast(`画像アップロード失敗: ${error.message}`);
@@ -734,14 +736,16 @@ function SearchResults({ store, query, kind, renderPost, onFollow }) {
 
 function Profile({ user, store, renderPost, onFollow, editing, onEdit, onCancel, onSave }) {
   const [avatarFile, setAvatarFile] = useState(null);
+  const [coverFile, setCoverFile] = useState(null);
   const avatarPreview = useMemo(() => (avatarFile ? URL.createObjectURL(avatarFile) : ""), [avatarFile]);
+  const coverPreview = useMemo(() => (coverFile ? URL.createObjectURL(coverFile) : ""), [coverFile]);
   const posts = store.posts.filter((post) => post.userId === user.id && !post.replyToPostId);
   const following = store.follows.filter((follow) => follow.followerId === user.id).length;
   const followers = store.follows.filter((follow) => follow.followingId === user.id).length;
   const isFollowing = store.follows.some((follow) => follow.followerId === store.viewerId && follow.followingId === user.id);
   return (
     <>
-      <div className="profile-cover"></div>
+      <div className="profile-cover" style={coverPreview || user.coverUrl ? { backgroundImage: `url(${coverPreview || user.coverUrl})` } : undefined}></div>
       <div className="profile-head">
         <div>
           <Avatar user={avatarPreview ? { ...user, avatarUrl: avatarPreview } : user} />
@@ -762,9 +766,14 @@ function Profile({ user, store, renderPost, onFollow, editing, onEdit, onCancel,
                 displayName: data.get("displayName").trim(),
                 bio: data.get("bio").trim(),
                 avatarFile,
+                coverFile,
               });
             }}
           >
+            <label className="field">
+              カバー画像
+              <input type="file" accept="image/*" onChange={(event) => setCoverFile(event.target.files?.[0] || null)} />
+            </label>
             <label className="field">
               プロフィール画像
               <input type="file" accept="image/*" onChange={(event) => setAvatarFile(event.target.files?.[0] || null)} />

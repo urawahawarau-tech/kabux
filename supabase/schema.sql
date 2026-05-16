@@ -14,6 +14,7 @@ create table if not exists public.profiles (
   display_name text not null check (char_length(display_name) between 1 and 32),
   bio text not null default '',
   avatar_url text,
+  cover_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -71,6 +72,8 @@ create index if not exists posts_reply_to_idx on public.posts (reply_to_post_id)
 create index if not exists posts_quoted_idx on public.posts (quoted_post_id);
 create index if not exists reactions_post_id_idx on public.reactions (post_id);
 create index if not exists bookmarks_user_id_idx on public.bookmarks (user_id);
+
+alter table public.profiles add column if not exists cover_url text;
 
 grant usage on schema public to anon, authenticated;
 grant select on public.profiles, public.posts, public.follows, public.reactions to anon, authenticated;
