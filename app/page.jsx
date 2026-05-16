@@ -180,7 +180,7 @@ export default function KabuxApp() {
 
   function scorePost(post) {
     const c = countsFor(post.id);
-    const base = c.useful * 3 - c.noise * 2 + c.replies + c.quotes * 2 + c.bookmarks * 2 + post.impressionCount * 0.01;
+    const base = c.useful * 3 - c.noise * 2 + c.replies + c.quotes * 2 + c.bookmarks * 2;
     const hours = Math.max(1, (Date.now() - new Date(post.createdAt).getTime()) / 3600000);
     return base / Math.sqrt(hours);
   }
@@ -216,7 +216,10 @@ export default function KabuxApp() {
     localStorage.setItem("kabux:pending-profile", JSON.stringify({ username, displayName }));
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin },
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: { username, display_name: displayName },
+      },
     });
     setAuthMessage(error ? error.message : "ログインリンクをメールに送りました。リンクを開くと登録が完了します。");
   }
@@ -224,12 +227,13 @@ export default function KabuxApp() {
   async function ensureCloudProfile() {
     if (!supabase || !session) return;
     const pending = JSON.parse(localStorage.getItem("kabux:pending-profile") || "null");
-    const { data } = await supabase.from("profiles").select("id").eq("id", session.user.id).maybeSingle();
+    const metadata = session.user.user_metadata || {};
+    const { data } = await supabase.from("profiles").select("id, username, display_name").eq("id", session.user.id).maybeSingle();
     if (!data) {
       const { error } = await supabase.from("profiles").insert({
         id: session.user.id,
-        username: pending?.username || session.user.email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "_"),
-        display_name: pending?.displayName || "株っくすユーザー",
+        username: pending?.username || metadata.username || `user_${session.user.id.slice(0, 8)}`,
+        display_name: pending?.displayName || metadata.display_name || "株っくすユーザー",
       });
       if (error) {
         showToast(error.message);
@@ -237,7 +241,23 @@ export default function KabuxApp() {
       }
       localStorage.removeItem("kabux:pending-profile");
       await loadCloud(session.user.id);
+      return;
     }
+
+    if (pending?.username && data.username !== pending.username) {
+      const { data: existingUsername } = await supabase.from("profiles").select("id").eq("username", pending.username).neq("id", session.user.id).maybeSingle();
+      if (!existingUsername) {
+        const { error } = await supabase
+          .from("profiles")
+          .update({ username: pending.username, display_name: pending.displayName || data.display_name })
+          .eq("id", session.user.id);
+        if (error) {
+          showToast(error.message);
+          return;
+        }
+      }
+    }
+    localStorage.removeItem("kabux:pending-profile");
   }
 
   useEffect(() => {
@@ -376,16 +396,18 @@ export default function KabuxApp() {
     showToast("投稿を削除しました");
   }
 
-  async function updateProfile({ displayName, bio }) {
+  async function updateProfile({ username, displayName, bio }) {
     if (!store.viewerId) return;
     if (cloudMode) {
-      const { error } = await supabase.from("profiles").update({ display_name: displayName, bio }).eq("id", store.viewerId);
+      const { data: existingUsername } = await supabase.from("profiles").select("id").eq("username", username).neq("id", store.viewerId).maybeSingle();
+      if (existingUsername) return showToast("そのユーザーIDは使われています");
+      const { error } = await supabase.from("profiles").update({ username, display_name: displayName, bio }).eq("id", store.viewerId);
       if (error) return showToast(error.message);
       await loadCloud(store.viewerId);
     } else {
       setStore((current) => ({
         ...current,
-        users: current.users.map((user) => (user.id === current.viewerId ? { ...user, displayName, bio } : user)),
+        users: current.users.map((user) => (user.id === current.viewerId ? { ...user, username, displayName, bio } : user)),
       }));
     }
     setEditingProfile(false);
@@ -546,7 +568,6 @@ export default function KabuxApp() {
                 <button className={`action-button ${useful ? "active" : ""}`} data-action="useful" type="button" onClick={() => toggleReaction(post.id, "useful")}>有益 {c.useful}</button>
                 <button className={`action-button ${noise ? "active" : ""}`} data-action="noise" type="button" onClick={() => toggleReaction(post.id, "noise")}>ノイズ {c.noise}</button>
                 <button className={`action-button ${saved ? "active" : ""}`} data-action="bookmark" type="button" onClick={() => toggleBookmark(post.id)}>保存 {c.bookmarks}</button>
-                <span className="action-button">表示 {formatCount(post.impressionCount)}</span>
               </div>
               {replies.map((reply) => <div className="reply-box" key={reply.id}>{renderPost(reply, true)}</div>)}
             </>
@@ -648,9 +669,14 @@ function Profile({ user, store, renderPost, onFollow, editing, onEdit, onCancel,
             onSubmit={(event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
-              onSave({ displayName: data.get("displayName").trim(), bio: data.get("bio").trim() });
+              onSave({
+                username: data.get("username").trim().replace(/^@/, ""),
+                displayName: data.get("displayName").trim(),
+                bio: data.get("bio").trim(),
+              });
             }}
           >
+            <label className="field">ユーザーID<input name="username" defaultValue={user.username} maxLength="24" pattern="[a-zA-Z0-9_]+" required /></label>
             <label className="field">表示名<input name="displayName" defaultValue={user.displayName} maxLength="32" required /></label>
             <label className="field">自己紹介<textarea name="bio" defaultValue={user.bio} maxLength="160" /></label>
             <div className="inline-actions">
@@ -781,10 +807,6 @@ function relativeTime(date) {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}時間前`;
   return `${Math.floor(hours / 24)}日前`;
-}
-
-function formatCount(number) {
-  return new Intl.NumberFormat("ja-JP", { notation: number >= 10000 ? "compact" : "standard" }).format(number);
 }
 
 function chartImage(label, color, values) {
