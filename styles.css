@@ -132,6 +132,11 @@ button {
   font-weight: 700;
 }
 
+.nav-icon,
+.mobile-fab {
+  display: none;
+}
+
 .nav-item:hover,
 .nav-item.active {
   background: #e9eef6;
@@ -836,14 +841,24 @@ button {
   }
 
   .nav-item {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
     font-size: 12px;
-    padding: 8px 4px;
+    padding: 6px 4px;
+  }
+
+  .nav-icon {
+    display: block;
+    color: #273244;
+    font-size: 18px;
+    line-height: 1;
   }
 
   .main-panel {
     min-height: 100vh;
     border: 0;
-    padding-bottom: 70px;
+    padding-bottom: 78px;
   }
 
   .topbar {
@@ -851,7 +866,7 @@ button {
   }
 
   .view {
-    padding: 14px 10px 32px;
+    padding: 12px 10px 32px;
   }
 
   .auth-panel {
@@ -867,7 +882,7 @@ button {
   }
 
   .post-card {
-    padding: 12px;
+    padding: 11px;
   }
 
   .post-images {
@@ -895,11 +910,63 @@ button {
   }
 
   .post-actions {
-    gap: 8px;
+    gap: 7px;
   }
 
   .action-button {
     min-height: 30px;
+    padding: 0 8px;
     font-size: 12px;
+  }
+
+  .inline-composer {
+    margin: 12px 0;
+    padding: 12px;
+  }
+
+  .composer-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .composer-row .avatar {
+    width: 34px;
+    height: 34px;
+  }
+
+  .composer-actions {
+    align-items: stretch;
+  }
+
+  .composer-actions .meta {
+    width: 100%;
+  }
+
+  .file-label,
+  .composer-actions .primary-button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .mobile-compose {
+    display: none;
+  }
+
+  .mobile-fab {
+    position: fixed;
+    right: 16px;
+    bottom: 82px;
+    z-index: 12;
+    display: grid;
+    place-items: center;
+    width: 54px;
+    height: 54px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--blue);
+    color: #fff;
+    font-size: 30px;
+    line-height: 1;
+    box-shadow: 0 14px 28px rgba(31, 111, 235, 0.28);
   }
 }

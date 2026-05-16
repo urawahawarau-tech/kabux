@@ -478,13 +478,14 @@ export default function KabuxApp() {
         </button>
         <nav className="nav-stack">
           {[
-            ["home", "ホーム"],
-            ["search", "検索"],
-            ["bookmarks", "ブックマーク"],
-            ["notifications", "通知"],
-            ["profile", "プロフィール"],
-          ].map(([key, label]) => (
+            ["home", "⌂", "ホーム"],
+            ["search", "⌕", "検索"],
+            ["bookmarks", "▣", "保存"],
+            ["notifications", "◌", "通知"],
+            ["profile", "◉", "プロフィール"],
+          ].map(([key, icon, label]) => (
             <button className={`nav-item ${route === key ? "active" : ""}`} key={key} type="button" onClick={() => setRoute(key)}>
+              <span className="nav-icon" aria-hidden="true">{icon}</span>
               <span>{label}</span>
             </button>
           ))}
@@ -574,6 +575,8 @@ export default function KabuxApp() {
       </main>
 
       <RightRail store={store} countsFor={countsFor} />
+
+      <button className="mobile-fab" type="button" aria-label="投稿を作成" onClick={() => setModal({})}>＋</button>
 
       {modal ? (
         <div className="modal-backdrop">
