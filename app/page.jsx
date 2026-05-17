@@ -93,6 +93,8 @@ export default function KabuxApp() {
     }
 
     let mounted = true;
+    const recoveryRequested = new URLSearchParams(window.location.search).get("recovery") === "1";
+    if (recoveryRequested) setPasswordRecovery(true);
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       setSession(data.session);
@@ -100,7 +102,8 @@ export default function KabuxApp() {
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      setPasswordRecovery(event === "PASSWORD_RECOVERY");
+      if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
+      if (event === "SIGNED_OUT") setPasswordRecovery(false);
       setSession(nextSession);
       loadCloud(nextSession?.user.id || null);
     });
@@ -246,7 +249,7 @@ export default function KabuxApp() {
   }
 
   async function sendPasswordReset(email) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/?recovery=1` });
     setAuthMessage(error ? error.message : "パスワード設定メールを送りました。メール内のリンクを開いてください。");
   }
 
@@ -257,6 +260,7 @@ export default function KabuxApp() {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) return showToast(error.message);
     setPasswordRecovery(false);
+    window.history.replaceState({}, "", window.location.pathname);
     showToast("パスワードを更新しました");
   }
 
@@ -545,7 +549,7 @@ export default function KabuxApp() {
 
         {supabase && passwordRecovery ? <PasswordRecoveryPanel onSubmit={updatePassword} /> : null}
 
-        {supabase && !session ? (
+        {supabase && !session && !passwordRecovery ? (
           <AuthPanel
             mode={authMode}
             onModeChange={setAuthMode}
