@@ -5,6 +5,11 @@ export const metadata = {
   description: "日本株投資家向けのXライクなWeb SNS",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="ja">

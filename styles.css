@@ -346,6 +346,10 @@ button {
   scrollbar-width: none;
 }
 
+.mobile-feed-select {
+  display: none;
+}
+
 .tab,
 .filter-chip {
   flex: 0 0 auto;
@@ -1032,6 +1036,28 @@ button {
   .tab-bar,
   .search-grid {
     max-width: 100%;
+  }
+
+  .tab-bar {
+    display: none;
+  }
+
+  .mobile-feed-select {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 12px;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .mobile-feed-select select {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--ink);
+    padding: 10px 11px;
   }
 
   .section-head {

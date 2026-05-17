@@ -7,6 +7,12 @@ const LOCAL_KEY = "kabux:next:v0.1";
 const MAX_BODY_LENGTH = 10000;
 const supabase = getSupabaseClient();
 const guestUser = { id: null, username: "guest", displayName: "ゲスト", bio: "", avatarUrl: "", createdAt: null };
+const feedOptions = [
+  ["globalRecommended", "おすすめ"],
+  ["globalChrono", "時系列"],
+  ["followingRecommended", "フォローおすすめ"],
+  ["followingChrono", "フォロー時系列"],
+];
 
 const seed = {
   viewerId: "u-yui",
@@ -578,15 +584,16 @@ export default function KabuxApp() {
         <section className={`view ${route === "home" ? "active" : ""}`}>
           <SectionHead eyebrow="日本株SNS" title="ホーム" onCompose={() => setModal({})} />
           <div className="tab-bar" role="tablist" aria-label="タイムライン">
-            {[
-              ["globalRecommended", "おすすめ"],
-              ["globalChrono", "時系列"],
-              ["followingRecommended", "フォローおすすめ"],
-              ["followingChrono", "フォロー時系列"],
-            ].map(([key, label]) => (
+            {feedOptions.map(([key, label]) => (
               <button className={`tab ${feedMode === key ? "active" : ""}`} key={key} type="button" onClick={() => setFeedMode(key)}>{label}</button>
             ))}
           </div>
+          <label className="mobile-feed-select">
+            タイムライン
+            <select value={feedMode} onChange={(event) => setFeedMode(event.target.value)}>
+              {feedOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </label>
           <Composer viewer={viewer} onSubmit={createPost} />
           <div className="feed">{feedPosts.length ? feedPosts.map((post) => renderPost(post)) : <Empty>表示できる投稿がありません。</Empty>}</div>
         </section>
