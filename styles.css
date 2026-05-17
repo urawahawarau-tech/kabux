@@ -27,6 +27,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif;
   line-height: 1.55;
   letter-spacing: 0;
+  overflow-x: hidden;
 }
 
 button,
@@ -942,12 +943,27 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .auth-form.signup {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-form.signup .primary-button {
+    grid-column: auto;
+  }
+
   .section-head .compact {
     display: none;
   }
 
   .post-card {
+    grid-template-columns: 34px minmax(0, 1fr);
     padding: 11px;
+  }
+
+  .post-card > div,
+  .profile-head > div,
+  .admin-user-row > div {
+    min-width: 0;
   }
 
   .post-images {
@@ -1011,6 +1027,19 @@ button {
   .composer-actions .primary-button {
     flex: 1;
     justify-content: center;
+  }
+
+  .tab-bar,
+  .search-grid {
+    max-width: 100%;
+  }
+
+  .section-head {
+    min-width: 0;
+  }
+
+  .profile-head {
+    flex-wrap: wrap;
   }
 
   .mobile-compose {
